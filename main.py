@@ -1,5 +1,5 @@
 """
-VoiceGuard Backend - FastAPI entry point.
+sonicverify Backend - FastAPI entry point.
 
 Run:  uvicorn main:app --reload
 Docs: http://localhost:8000/docs
@@ -21,7 +21,7 @@ from app.exceptions import AppError
 from app.services.analysis_service import cleanup_stale_uploads
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger("voiceguard")
+logger = logging.getLogger("sonicverify")
 
 
 @asynccontextmanager

@@ -20,7 +20,7 @@ from app.services import number_service, risk_service
 from app.services.detection_service import detect_voice
 from app.utils.validation import normalize_phone_number, validate_audio_upload
 
-logger = logging.getLogger("voiceguard")
+logger = logging.getLogger("sonicverify")
 
 MAX_IDENTITY_LENGTH = 200
 

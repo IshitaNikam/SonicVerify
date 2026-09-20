@@ -1,4 +1,4 @@
-# VoiceGuard Backend — SIH 2026, PS 26104
+# sonicverify Backend — SIH 2026, PS 26104
 
 Backend & system-integration layer for **AI-Powered Real-Time Detection and Prevention of Voice Cloning
 Impersonation Attacks**. FastAPI + SQLite + SQLAlchemy. Runs locally, no external services.
@@ -45,7 +45,7 @@ uploads/                    TEMPORARY audio only (emptied after every request)
 tests/test_api.py
 ```
 
-## Database (SQLite, auto-created as `voiceguard.db`)
+## Database (SQLite, auto-created as `sonicverify.db`)
 
 | Table | Columns |
 |---|---|
@@ -53,7 +53,7 @@ tests/test_api.py
 | `fraud_reports` | id, phone_number (FK → phone_numbers), category, description, created_at |
 | `analysis_history` | id, phone_number, synthetic_probability (null if model unavailable), number_risk, context_risk, final_risk_score, risk_level, created_at |
 
-Timestamps are UTC. Delete `voiceguard.db` to reset everything (then re-run `seed_database.py`).
+Timestamps are UTC. Delete `sonicverify.db` to reset everything (then re-run `seed_database.py`).
 
 ## API
 

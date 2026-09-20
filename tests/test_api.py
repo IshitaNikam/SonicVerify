@@ -12,7 +12,7 @@ import wave
 from pathlib import Path
 
 # --- point the app at temporary storage BEFORE importing it -----------------
-_TMP = tempfile.mkdtemp(prefix="voiceguard_test_")
+_TMP = tempfile.mkdtemp(prefix="sonicverify_test_")
 os.environ["DATABASE_URL"] = f"sqlite:///{Path(_TMP, 'test.db').as_posix()}"
 os.environ["UPLOAD_DIR"] = str(Path(_TMP, "uploads"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -67,7 +67,7 @@ def test_health():
     r = client.get("/api/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
-    assert r.json()["service"] == "VoiceGuard Backend"
+    assert r.json()["service"] == "sonicverify Backend"
 
 
 # 2. Normalization -----------------------------------------------------------

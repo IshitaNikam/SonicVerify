@@ -1,5 +1,5 @@
 """
-Central configuration for the VoiceGuard backend.
+Central configuration for the sonicverify backend.
 
 Everything you might want to tune during the hackathon lives in this file:
   * report-count -> number risk thresholds
@@ -33,10 +33,10 @@ def _resolve_dir(value: str | None, default: Path) -> Path:
 # --------------------------------------------------------------------------
 # General
 # --------------------------------------------------------------------------
-APP_NAME = "VoiceGuard Backend"
+APP_NAME = "sonicverify Backend"
 APP_VERSION = "1.0.0"
 
-DATABASE_URL = os.getenv("DATABASE_URL") or f"sqlite:///{(BASE_DIR / 'voiceguard.db').as_posix()}"
+DATABASE_URL = os.getenv("DATABASE_URL") or f"sqlite:///{(BASE_DIR / 'sonicverify.db').as_posix()}"
 
 CORS_ORIGINS = _env_list(
     "CORS_ORIGINS",
