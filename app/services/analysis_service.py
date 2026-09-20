@@ -127,6 +127,8 @@ def run_analysis(
     # 7. Final response
     return AnalysisResponse(
         analysis_id=history.id,
+        security_action=security_result["action"],
+        verification_required=security_result["verification_required"],
         voice_analysis=VoiceAnalysis(
             **detection, summary=risk_service.voice_summary(detection["synthetic_probability"])
         ),
