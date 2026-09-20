@@ -1,4 +1,44 @@
-# sonicverify Backend — SIH 2026, PS 26104
+# SonicVerify — SIH 2026, PS 26104
+
+# 🎙️ SonicVerify — Audio Deepfake & Voice Scam Detection Backend
+
+SonicVerify is an AI-powered RESTful backend API designed to analyze incoming voice audio calls, detect synthetic deepfakes, evaluate phone number reputation against scam reporting databases, and generate actionable risk assessments in real-time.
+
+---
+
+## 🚀 Key Features
+
+* **Real-time Deepfake Detection:** Integrates machine learning classification models to distinguish authentic human speech from AI-generated audio/voice clones.
+* **Reputation Database Evaluation:** Queries reported scam and suspicious phone numbers to assign risk tiers (`LOW`, `MEDIUM`, `HIGH`, `UNKNOWN`).
+* **Automated Risk Scoring:** Merges audio verification confidence scores with historical database signals to compute overall threat metrics.
+* **Interactive API Documentation:** Built with FastAPI for automated OpenAPI documentation and interactive Swagger UI endpoints.
+
+---
+
+## 🛠️ Tech Stack & Dependencies
+
+* **Framework:** FastAPI / Python 3.10+
+* **Database:** SQLite (SQLAlchemy ORM)
+* **Testing:** Pytest & HTTPX Async Client
+* **Server:** Uvicorn (ASGI)
+
+---
+
+## 📂 Project Architecture
+
+```text
+backend/
+├── app/
+│   ├── api/          # Route handlers & API endpoints
+│   ├── db/           # Database models & SQLite session config
+│   ├── schemas/      # Pydantic validation models
+│   ├── services/     # Audio detection logic & database lookup services
+│   ├── config.py     # Global app configuration & settings
+│   └── exceptions.py # Custom API error handlers
+├── tests/            # Automated unit and API test suite
+├── main.py           # FastAPI application entry point
+├── seed_database.py  # Script to populate initial demo data
+└── requirements.txt  # Python package dependencies
 
 Backend & system-integration layer for **AI-Powered Real-Time Detection and Prevention of Voice Cloning
 Impersonation Attacks**. FastAPI + SQLite + SQLAlchemy. Runs locally, no external services.
