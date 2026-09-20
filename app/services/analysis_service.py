@@ -107,6 +107,9 @@ def run_analysis(
         financial_request=financial_request,
         identity_claim=identity_claim,
     )
+    security_result = security_service.security_check(
+    risk.assessment.risk_level
+)
 
     # 6. Save history (numbers only - no audio)
     history = AnalysisHistory(
