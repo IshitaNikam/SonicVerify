@@ -45,6 +45,4 @@ def security_check(risk_level):
         "action": action,
         "verification_required": verification_required
     }
-    print(security_check("LOW"))
-print(security_check("UNCERTAIN"))
-print(security_check("HIGH"))
+    
