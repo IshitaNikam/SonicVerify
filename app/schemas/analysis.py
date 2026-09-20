@@ -41,8 +41,11 @@ class AnalysisResponse(BaseModel):
     voice_analysis: VoiceAnalysis
     number_intelligence: NumberIntelligence
     risk_assessment: RiskAssessment
+    security_action: str
+    verification_required: bool
     recommendation: str
     disclaimer: str
+    
 
 
 class HistoryItem(BaseModel):
