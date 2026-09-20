@@ -16,7 +16,7 @@ from app import config
 from app.db.models import AnalysisHistory
 from app.exceptions import FileTooLargeError
 from app.schemas.analysis import AnalysisResponse, HistoryItem, HistoryResponse, VoiceAnalysis
-from app.services import number_service, risk_service
+from app.services import number_service, risk_service,security_service
 from app.services.detection_service import detect_voice
 from app.utils.validation import normalize_phone_number, validate_audio_upload
 
