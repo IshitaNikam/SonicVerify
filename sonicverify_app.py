@@ -5,18 +5,7 @@ A Streamlit front-end for a voice-integrity verification tool. Users can
 record or upload an audio clip; the app analyzes it and produces a
 Risk % score (probability the voice is AI-generated / cloned), a
 breakdown across Acoustic / Prosody / Spectral dimensions, a plain-
-language explanation, alerts, and recommended actions — matching the
-"Real-Time Detection and Prevention of Voice Cloning Impersonation
-Attacks" problem statement.
-
-IMPORTANT — HONESTY NOTE
-The scoring engine here is a transparent, explainable SIGNAL-STATISTICS
-HEURISTIC (energy variance, silence ratio, zero-crossing rate, spectral
-flatness / harmonic regularity). It is a functional demo/prototype UI,
-NOT a trained deep-learning deepfake-voice classifier. Swap the body of
-`compute_scores()` for a real model's inference call when one is ready
-— the rest of the app (UI, alerts, history, reports) will keep working
-unchanged.
+language explanation, alerts, and recommended actions.
 """
 
 import io
@@ -64,142 +53,284 @@ for k, v in defaults.items():
 
 
 # ============================================================================
-# THEME
+# THEME & CSS INJECTION
 # ============================================================================
 def inject_theme(theme: str):
     if theme == "dark":
         bg, bg2, text, sub, card, border = (
-            "#070a12", "#0d1220", "#f2f4fa", "#8992a9", "#121828", "#232a3d",
+            "#070c1f", "#0f1a3a", "#f4f6fc", "#a8b6db", "#121f45", "#22325f",
         )
-        grad1, grad2 = "#4338ca", "#0891b2"
+        grad1, grad2 = "#ff7a1a", "#ffa94d"
     else:
         bg, bg2, text, sub, card, border = (
-            "#f7f8fc", "#ffffff", "#0f1220", "#5b5f73", "#ffffff", "#e2e5f0",
+            "#fdf6ee", "#f7ead9", "#1a2140", "#5c6690", "#fffaf2", "#ecd9bd",
         )
-        grad1, grad2 = "#6366f1", "#06b6d4"
+        grad1, grad2 = "#e8590c", "#ff8a3d"
 
     st.markdown(
         f"""
         <style>
-        /* ---- Core Streamlit theme variables (cascades to most native widgets) ---- */
-        :root, .stApp {{
-            --primary-color: {grad2};
+        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap');
+
+        /* Default Font Scope */
+        :root {{
+            --font-display: 'Sora', sans-serif;
+            --primary-color: {grad1};
             --background-color: {bg};
             --secondary-background-color: {card};
             --text-color: {text};
             color: {text};
         }}
-        .stApp {{ background-color: {bg}; color: {text}; }}
-        header[data-testid="stHeader"] {{ background-color: transparent; }}
-        section[data-testid="stSidebar"] {{ background-color: {bg2}; border-right: 1px solid {border}; }}
-        section[data-testid="stSidebar"] * {{ color: {text}; }}
 
-        /* Generic text-bearing elements: force readable color everywhere */
-        .stApp, .stApp p, .stApp span, .stApp label, .stApp li, .stApp h1,
-        .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp div,
-        [data-testid="stMarkdownContainer"], [data-testid="stMetricLabel"],
-        [data-testid="stMetricValue"], [data-testid="stMetricDelta"],
-        [data-testid="stCaptionContainer"], [data-testid="stWidgetLabel"] p {{
+        /* Apply Sora font globally without breaking Material Symbols/Icons */
+        html, body, .stApp, .stApp *:not([data-testid="stIconMaterial"]):not(.material-icons):not([class*="material-symbols"]):not(i) {{
+            font-family: "Sora", sans-serif;
             color: {text};
         }}
-        .stCaption, [data-testid="stCaptionContainer"] * {{ color: {sub} !important; }}
 
-        /* Alerts (info/warning/error/success) — keep readable in both themes */
-        div[data-testid="stAlert"] {{ color: {text}; }}
-        div[data-testid="stAlert"] p {{ color: {text} !important; }}
-
-        /* Selectbox / radio / toggle / expander / tabs */
-        div[data-baseweb="select"] * {{ color: {text} !important; }}
-        ul[data-baseweb="menu"] * {{ color: #111 !important; }}
-        [data-testid="stExpander"] {{ background-color: {card}; border: 1px solid {border}; border-radius: 12px; }}
-        [data-testid="stExpander"] summary {{ color: {text} !important; }}
-        [data-testid="stTabs"] button p {{ color: {sub} !important; }}
-        [data-testid="stTabs"] button[aria-selected="true"] p {{ color: {text} !important; font-weight: 700; }}
-
-        /* File uploader / audio input drop zones */
-        [data-testid="stFileUploaderDropzone"], [data-testid="stAudioInput"] {{
-            background-color: {card} !important; border: 1px dashed {border} !important;
-            border-radius: 14px !important; color: {text} !important;
+        /* Global Markdown & Paragraph Visibility Fix */
+        .stApp p, .stApp span, .stApp li, .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6 {{
+            color: {text} !important;
         }}
-        [data-testid="stFileUploaderDropzone"] *, [data-testid="stAudioInput"] * {{ color: {text} !important; }}
 
-        /* Links */
-        .stApp a {{ color: {grad2}; }}
-
-        div[data-testid="stMetric"] {{
-            background-color: {card}; border: 1px solid {border};
-            border-radius: 14px; padding: 14px 18px;
+        /* STRICT FIX FOR DOUBLE ARROW TEXT / MATERIAL ICONS */
+        [data-testid="stIconMaterial"],
+        span[data-testid="stIconMaterial"],
+        .material-icons,
+        .material-symbols-outlined,
+        .material-symbols-rounded,
+        [class*="material-symbols"],
+        [data-testid="stExpander"] summary svg,
+        [data-testid="stExpander"] summary span,
+        [data-testid="stExpander"] summary [data-testid="stIconMaterial"] {{
+            font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
+            font-weight: normal !important;
+            font-style: normal !important;
+            line-height: 1 !important;
+            text-transform: none !important;
+            letter-spacing: normal !important;
+            word-wrap: normal !important;
+            white-space: nowrap !important;
+            direction: ltr !important;
+            -webkit-font-smoothing: antialiased !important;
         }}
+
+        /* App Backgrounds */
+        html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"],
+        .main, .block-container, [data-testid="stBottom"], [data-testid="stBottomBlockContainer"],
+        [data-testid="stForm"], [data-testid="stVerticalBlock"], [data-testid="stHorizontalBlock"] {{
+            background-color: {bg} !important;
+        }}
+        header[data-testid="stHeader"] {{ background-color: {bg} !important; }}
+        header[data-testid="stHeader"] * {{ color: {text} !important; fill: {text} !important; }}
+        [data-testid="stToolbar"] {{ background-color: {bg} !important; }}
+        section[data-testid="stSidebar"] {{ background-color: {bg2} !important; border-right: 1px solid {border} !important; }}
+        section[data-testid="stSidebar"] * {{ color: {text} !important; }}
+
+        /* SELECTBOX & DROPDOWN THEME MATCHING FIX */
+        [data-testid="stSelectbox"] > div > div {{
+            background-color: {card} !important;
+            color: {text} !important;
+            border: 1px solid {border} !important;
+            border-radius: 10px !important;
+        }}
+        [data-testid="stSelectbox"] * {{
+            color: {text} !important;
+            fill: {text} !important;
+        }}
+        [data-baseweb="select"] * {{
+            background-color: {card} !important;
+            color: {text} !important;
+        }}
+        [data-baseweb="popover"], [data-baseweb="menu"], ul[role="listbox"] {{
+            background-color: {card} !important;
+            border: 1px solid {border} !important;
+            border-radius: 10px !important;
+        }}
+        li[role="option"] {{
+            background-color: {card} !important;
+            color: {text} !important;
+        }}
+        li[role="option"]:hover, li[aria-selected="true"] {{
+            background-color: {bg2} !important;
+            color: {grad1} !important;
+        }}
+
+        /* Expander Styling & Fixes */
+        [data-testid="stExpander"] {{
+            background-color: {card} !important;
+            border: 1px solid {border} !important;
+            border-radius: 12px !important;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }}
+        [data-testid="stExpander"] details {{
+            background-color: {card} !important;
+        }}
+        [data-testid="stExpander"] summary {{
+            background-color: {card} !important;
+            color: {text} !important;
+            padding: 12px 16px !important;
+            border-radius: 12px !important;
+        }}
+        [data-testid="stExpander"] summary:hover {{
+            background-color: {bg2} !important;
+        }}
+        [data-testid="stExpander"] div[role="group"] {{
+            background-color: {card} !important;
+            padding: 16px !important;
+        }}
+
+        /* UPLOAD AUDIO & FILE UPLOADER THEME MATCHING */
+        [data-testid="stFileUploader"] {{
+            background-color: {card} !important;
+            border: 1px solid {border} !important;
+            border-radius: 14px !important;
+            padding: 16px !important;
+        }}
+        [data-testid="stFileUploader"] label, 
+        [data-testid="stFileUploader"] [data-testid="stWidgetLabel"] p,
+        [data-testid="stFileUploader"] span,
+        [data-testid="stFileUploader"] small {{
+            color: {text} !important;
+            font-weight: 600 !important;
+        }}
+        [data-testid="stFileUploaderDropzone"] {{
+            background-color: {bg2} !important;
+            border: 2px dashed {border} !important;
+            border-radius: 12px !important;
+            color: {text} !important;
+        }}
+        [data-testid="stFileUploaderDropzone"] * {{
+            color: {text} !important;
+        }}
+        [data-testid="stFileUploaderDropzone"] button {{
+            background-color: {card} !important;
+            color: {text} !important;
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+        }}
+        [data-testid="stFileUploaderDropzone"] button:hover {{
+            border-color: {grad1} !important;
+            color: {grad1} !important;
+        }}
+        [data-testid="stFileUploaderFile"] {{
+            background-color: {bg2} !important;
+            border: 1px solid {border} !important;
+            border-radius: 10px !important;
+        }}
+        [data-testid="stFileUploaderFile"] * {{
+            color: {text} !important;
+        }}
+        [data-testid="stFileUploaderFileName"] {{
+            color: {text} !important;
+            font-weight: 500 !important;
+        }}
+
+        /* Audio Recorder Theme Match */
+        [data-testid="stAudioInput"] {{
+            background-color: {card} !important;
+            border: 1px dashed {border} !important;
+            border-radius: 14px !important;
+            padding: 14px !important;
+        }}
+        [data-testid="stAudioInput"] * {{
+            background-color: transparent !important;
+            color: {text} !important;
+        }}
+        [data-testid="stAudioInput"] svg {{ fill: {grad1} !important; color: {grad1} !important; }}
+
+        /* Typography & Custom Elements */
         .sv-hero {{
             background: linear-gradient(120deg, {grad1}22, {grad2}22);
             border: 1px solid {border};
             border-radius: 20px; padding: 28px 32px; margin-bottom: 22px;
         }}
         .sv-hero h1 {{
-            font-size: 2.1rem; font-weight: 800; margin: 0;
+            font-weight: 700 !important;
+            font-size: clamp(32px, 4vw, 50px) !important;
+            letter-spacing: -0.04em !important;
+            line-height: 1.1 !important;
+            margin: 0;
             background: linear-gradient(90deg, {grad1}, {grad2});
-            -webkit-background-clip: text; background-clip: text; color: transparent;
+            -webkit-background-clip: text; background-clip: text; color: transparent !important;
         }}
-        .sv-hero p {{ color: {sub}; margin-top: 6px; font-size: 1.02rem; }}
+        .sv-hero p {{
+            color: {sub} !important; margin-top: 8px; font-size: 1.02rem;
+            line-height: 1.6 !important;
+        }}
+
+        /* Card Container & Explicit Text Color Fixes */
         .sv-card {{
-            background-color: {card}; border: 1px solid {border};
+            background-color: {card} !important; border: 1px solid {border} !important;
             border-radius: 16px; padding: 22px 24px; margin-bottom: 18px;
+            color: {text} !important;
         }}
+        .sv-card *, .sv-card p, .sv-card li, .sv-card span, .sv-card div {{
+            color: {text} !important;
+        }}
+
         .sv-badge {{
             display: inline-block; padding: 5px 14px; border-radius: 999px;
             font-weight: 700; font-size: 0.85rem; letter-spacing: 0.02em;
         }}
         .sv-alert-high {{
-            background: #e74c3c22; border: 1px solid #e74c3c; color: #ff6b5b;
+            background: #e74c3c22; border: 1px solid #e74c3c; color: #ff6b5b !important;
             border-radius: 12px; padding: 14px 18px; font-weight: 600;
         }}
         .sv-alert-med {{
-            background: #f1c40f22; border: 1px solid #f1c40f; color: #f1c40f;
+            background: #f1c40f22; border: 1px solid #f1c40f; color: #f1c40f !important;
             border-radius: 12px; padding: 14px 18px; font-weight: 600;
         }}
         .sv-alert-low {{
-            background: #2ecc7122; border: 1px solid #2ecc71; color: #2ecc71;
+            background: #2ecc7122; border: 1px solid #2ecc71; color: #2ecc71 !important;
             border-radius: 12px; padding: 14px 18px; font-weight: 600;
         }}
-        .sv-subtle {{ color: {sub}; }}
-        .sv-navlabel {{ color: {sub}; font-size: 0.78rem; text-transform: uppercase;
+        .sv-subtle {{ color: {sub} !important; }}
+        .sv-navlabel {{ color: {sub} !important; font-size: 0.78rem; text-transform: uppercase;
             letter-spacing: 0.08em; margin: 14px 0 4px 2px; }}
         .sv-bar-track {{
             background-color: {border}; border-radius: 8px; height: 12px; width: 100%;
             overflow: hidden; margin-top: 4px;
         }}
         .sv-bar-fill {{ height: 100%; border-radius: 8px; }}
-        .stButton>button {{
+
+        /* Buttons & Metrics */
+        div[data-testid="stMetric"] {{
+            background-color: {card} !important; border: 1px solid {border} !important;
+            border-radius: 14px; padding: 14px 18px;
+        }}
+        [data-testid="stMetricLabel"] p {{ color: {sub} !important; }}
+        [data-testid="stMetricValue"] {{ color: {text} !important; }}
+
+        .stButton>button, .stDownloadButton>button {{
             border-radius: 10px; font-weight: 600; border: 1px solid {border};
             background-color: {card}; color: {text} !important;
         }}
         .stButton>button p {{ color: {text} !important; }}
-        .stButton>button:hover {{ border: 1px solid {grad2}; color: {grad2} !important; }}
-        .stButton>button:hover p {{ color: {grad2} !important; }}
+        .stButton>button:hover {{ border: 1px solid {grad1}; color: {grad1} !important; }}
+        .stButton>button:hover p {{ color: {grad1} !important; }}
         button[kind="primary"] {{
             background: linear-gradient(90deg, {grad1}, {grad2}) !important;
             border: none !important;
         }}
-        button[kind="primary"] p {{ color: #ffffff !important; font-weight: 700; }}
+        button[kind="primary"] p {{ color: #0a1128 !important; font-weight: 700; }}
 
-        /* Custom HTML table (used instead of st.dataframe for guaranteed contrast) */
+        /* Custom HTML Table */
         .sv-table {{ width: 100%; border-collapse: collapse; font-size: 0.92rem; }}
         .sv-table th {{
-            text-align: left; color: {sub}; font-weight: 600; font-size: 0.78rem;
+            text-align: left; color: {sub} !important; font-weight: 600; font-size: 0.78rem;
             text-transform: uppercase; letter-spacing: 0.05em;
             padding: 8px 12px; border-bottom: 1px solid {border};
         }}
-        .sv-table td {{
-            padding: 10px 12px; border-bottom: 1px solid {border}; color: {text};
-        }}
-        .sv-table tr:last-child td {{ border-bottom: none; }}
-        .sv-table tr:hover td {{ background-color: {bg2}; }}
+        .sv-table td {{ padding: 10px 12px; border-bottom: 1px solid {border}; color: {text} !important; }}
+        .sv-table tr:hover td {{ background-color: {bg2} !important; }}
+        audio {{ border-radius: 10px; width: 100%; }}
         </style>
         """,
         unsafe_allow_html=True,
     )
-    return dict(bg=bg, bg2=bg2, text=text, sub=sub, card=card, border=border,
-                grad1=grad1, grad2=grad2)
+    return dict(bg=bg, bg2=bg2, text=text, sub=sub, card=card, border=border, grad1=grad1, grad2=grad2)
 
 
 C = inject_theme(st.session_state.theme)
@@ -214,7 +345,6 @@ def risk_color(risk):
 
 
 def render_table(rows, columns):
-    """rows: list of dicts. columns: list of (key, display_label) tuples."""
     head = "".join(f"<th>{label}</th>" for _, label in columns)
     body_rows = []
     for r in rows:
@@ -229,7 +359,7 @@ def score_bar(label, value, color):
         f"""
         <div style="margin-bottom:10px;">
           <div style="display:flex; justify-content:space-between; font-size:0.92rem;">
-            <span>{label}</span><span style="font-weight:700;">{value:.0f}%</span>
+            <span style="color:{C['text']};">{label}</span><span style="font-weight:700; color:{C['text']};">{value:.0f}%</span>
           </div>
           <div class="sv-bar-track">
             <div class="sv-bar-fill" style="width:{value}%; background-color:{color};"></div>
@@ -277,7 +407,7 @@ def load_audio(uploaded_file):
 
 
 # ============================================================================
-# ANALYSIS ENGINE (heuristic — see module docstring)
+# ANALYSIS ENGINE
 # ============================================================================
 def compute_scores(samples: np.ndarray, sr: int):
     duration = len(samples) / sr if sr else 0
@@ -293,9 +423,8 @@ def compute_scores(samples: np.ndarray, sr: int):
     spec = np.abs(np.fft.rfft(samples * np.hanning(len(samples)))) + 1e-9
     spectral_flatness = float(np.exp(np.mean(np.log(spec))) / np.mean(spec))
 
-    # --- Sub-scores (0-100, higher = more "human-like" on that dimension) ---
     acoustic = 100 * np.clip(1 - spectral_flatness * 3, 0, 1)
-    prosody = 100 * np.clip(1 - abs(zcr - 0.08) * 4, 0, 1) * (1 - 0.5 * silence_ratio) + 0
+    prosody = 100 * np.clip(1 - abs(zcr - 0.08) * 4, 0, 1) * (1 - 0.5 * silence_ratio)
     prosody = float(np.clip(prosody, 0, 100))
     spectral_consistency = 100 * np.clip(1 - abs(energy_var - 0.01) * 8, 0, 1)
 
@@ -368,6 +497,26 @@ def recommendations(tier):
     ]
 
 
+def precautions(tier):
+    if tier == "high":
+        return [
+            "Stop the call now. Do not send money, share OTPs, or reveal confidential information.",
+            "Call the person back on a number you already trust, not one the caller gives you.",
+            "Report this to your security or fraud team right away and keep the recording.",
+        ]
+    if tier == "medium":
+        return [
+            "Do not share OTPs, passwords, or card details until the caller is verified.",
+            "Ask a question only the real person would know, or call back on a saved number.",
+            "Ignore urgency or pressure. Take your time and involve a supervisor.",
+        ]
+    return [
+        "Signals look consistent with a genuine human voice, but no automated check is perfect.",
+        "For high-value requests, still confirm through a second channel before acting.",
+        "Keep a record of the call in case you need to review it later.",
+    ]
+
+
 # ============================================================================
 # CHARTS
 # ============================================================================
@@ -406,7 +555,7 @@ def spectrogram_fig(samples, sr):
 def gauge_fig(risk, color):
     fig, ax = plt.subplots(figsize=(3.2, 3.2), subplot_kw={"aspect": "equal"})
     fig.patch.set_alpha(0)
-    track = "#232a3d" if st.session_state.theme == "dark" else "#e2e5f0"
+    track = "#22325f" if st.session_state.theme == "dark" else "#ecd9bd"
     ax.pie([risk, 100 - risk], colors=[color, track], startangle=90,
            counterclock=False, wedgeprops={"width": 0.32, "edgecolor": "none"})
     ax.text(0, 0.08, f"{risk:.0f}%", ha="center", va="center", fontsize=28,
@@ -559,9 +708,6 @@ elif page == "Record Audio":
               permission** — click **Allow**. If you accidentally blocked it,
               click the 🔒/ⓘ icon in the address bar and re-enable the mic for
               this site, then refresh the page.
-            - This feature requires **Streamlit 1.36 or newer**. Check your
-              version with `py -m streamlit version`; if it's older, run
-              `py -m pip install -U streamlit` and restart the app.
             - Speak for at least 1–2 seconds — very short clips can't be analyzed.
             - If none of this helps, use **Upload Audio** instead with a
               pre-recorded WAV file — the analysis works identically either way.
@@ -573,7 +719,7 @@ elif page == "Record Audio":
     if not audio_input_supported:
         st.error(
             "Your installed Streamlit version doesn't support in-browser "
-            "recording. Run `py -m pip install -U streamlit`, restart the "
+            "recording. Run `pip install -U streamlit`, restart the "
             "app, then reload this page. In the meantime, use **Upload Audio**."
         )
     else:
@@ -625,7 +771,7 @@ elif page == "Record Audio":
 elif page == "Upload Audio":
     st.markdown('<div class="sv-hero"><h1>📁 Upload Audio</h1><p>Upload a call recording or voice sample (WAV / FLAC / OGG) for analysis.</p></div>', unsafe_allow_html=True)
 
-    up = st.file_uploader("Choose an audio file", type=["wav", "flac", "ogg"])
+    up = st.file_uploader("Upload Audio File", type=["wav", "flac", "ogg"])
     if up is not None:
         st.audio(up)
         if st.button("▶️ Analyze File", type="primary"):
@@ -639,7 +785,7 @@ elif page == "Upload Audio":
                 st.rerun()
 
     with st.expander("📦 Batch-analyze multiple files"):
-        batch = st.file_uploader("Choose multiple files", type=["wav", "flac", "ogg"],
+        batch = st.file_uploader("Choose multiple audio files", type=["wav", "flac", "ogg"],
                                   accept_multiple_files=True, key="batch_uploader")
         if batch and st.button("▶️ Analyze All"):
             prog = st.progress(0, text="Starting…")
@@ -679,7 +825,15 @@ elif page == "Analysis Result":
             "low": "✅ LOW RISK — Signals are consistent with a genuine human voice.",
         }[res["tier"]]
         st.markdown(f'<div class="{alert_class}">{alert_msg}</div>', unsafe_allow_html=True)
-        st.write("")
+
+        tier_title = {"high": "High risk precautions", "medium": "Medium risk precautions", "low": "Low risk precautions"}[res["tier"]]
+        st.markdown(
+            f'<div class="sv-card" style="border:1px solid {res["color"]}; margin-top:12px;">'
+            f'<div style="font-weight:700; color:{res["color"]} !important; margin-bottom:8px;">{tier_title}</div>'
+            + "".join(f'<div style="margin:6px 0; color:{C["text"]};">{i}. {line}</div>' for i, line in enumerate(precautions(res["tier"]), 1))
+            + "</div>",
+            unsafe_allow_html=True,
+        )
 
         left, right = st.columns([1, 1.4])
         with left:
@@ -695,9 +849,9 @@ elif page == "Analysis Result":
 
         with right:
             st.markdown("**Risk Breakdown**")
-            score_bar("Acoustic Authenticity", res["acoustic"], "#06b6d4")
-            score_bar("Prosody Naturalness", res["prosody"], "#8b5cf6")
-            score_bar("Spectral Consistency", res["spectral"], "#22c55e")
+            score_bar("Acoustic Authenticity", res["acoustic"], "#ff7a1a")
+            score_bar("Prosody Naturalness", res["prosody"], "#ffa94d")
+            score_bar("Spectral Consistency", res["spectral"], "#5b8def")
             st.caption("Higher bars = more consistent with genuine human speech.")
 
         st.markdown("#### 🧠 Why this score?")
@@ -794,25 +948,27 @@ elif page == "Recommendations":
         ("🟡 Medium Risk", "#f1c40f", recommendations("medium")),
         ("🔴 High Risk", "#e74c3c", recommendations("high")),
     ]
+    text_color = C["text"]
     for col, (title, color, items) in zip(cols, playbooks):
         with col:
+            items_html = "".join(f"<p style='color:{text_color} !important;'>{i}</p>" for i in items)
             st.markdown(
-                f'<div class="sv-card"><h4 style="color:{color};">{title}</h4>'
-                + "".join(f"<p>{i}</p>" for i in items)
+                f'<div class="sv-card"><h4 style="color:{color} !important;">{title}</h4>'
+                + items_html
                 + "</div>",
                 unsafe_allow_html=True,
             )
 
     st.markdown("#### General Guidance")
     st.markdown(
-        """
+        f"""
         <div class="sv-card">
-        <ul>
-          <li>Never approve high-value transfers or share credentials based on a phone call alone — always verify through a second, independent channel.</li>
-          <li>Establish pre-agreed verification phrases with executives and finance teams for sensitive requests.</li>
-          <li>Treat urgency and pressure tactics ("do this now, don't tell anyone") as a red flag regardless of the risk score.</li>
-          <li>Log every flagged interaction, even low-risk ones, to help spot patterns over time.</li>
-          <li>Keep this tool's output as one input among several — combine it with organizational verification policy.</li>
+        <ul style="color:{C['text']} !important;">
+          <li style="color:{C['text']} !important;">Never approve high-value transfers or share credentials based on a phone call alone — always verify through a second, independent channel.</li>
+          <li style="color:{C['text']} !important;">Establish pre-agreed verification phrases with executives and finance teams for sensitive requests.</li>
+          <li style="color:{C['text']} !important;">Treat urgency and pressure tactics ("do this now, don't tell anyone") as a red flag regardless of the risk score.</li>
+          <li style="color:{C['text']} !important;">Log every flagged interaction, even low-risk ones, to help spot patterns over time.</li>
+          <li style="color:{C['text']} !important;">Keep this tool's output as one input among several — combine it with organizational verification policy.</li>
         </ul>
         </div>
         """,
