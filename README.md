@@ -11,6 +11,7 @@ SonicVerify is an AI-powered RESTful backend API designed to analyze incoming vo
 * **Real-time Deepfake Detection:** Integrates machine learning classification models to distinguish authentic human speech from AI-generated audio/voice clones.
 * **Reputation Database Evaluation:** Queries reported scam and suspicious phone numbers to assign risk tiers (`LOW`, `MEDIUM`, `HIGH`, `UNKNOWN`).
 * **Automated Risk Scoring:** Merges audio verification confidence scores with historical database signals to compute overall threat metrics.
+* **Security Action & Verification:** Converts the final risk level into a security action — ALLOW for LOW risk, WARNING for UNCERTAIN risk, and VERIFY for HIGH risk. HIGH-risk cases are flagged for additional verification.
 * **Interactive API Documentation:** Built with FastAPI for automated OpenAPI documentation and interactive Swagger UI endpoints.
 
 ---
@@ -78,6 +79,7 @@ app/services/
     detection_service.py    ★ ML integration point (placeholder until the model exists)
     number_service.py       lookup + report + report-count → risk level
     risk_service.py         transparent weighted risk formula
+    security_service.py     converts risk level into security action and verification requirement
 app/db/                     database.py (engine/session), models.py
 app/schemas/                Pydantic request/response models
 app/utils/validation.py     phone normalization + audio validation
@@ -156,6 +158,8 @@ curl -X POST localhost:8000/api/analyze \
       "context": {"risk": 0.6,  "weight": 0.15, "contribution": 0.09}
     }
   },
+   "security_action": "VERIFY",
+   "verification_required": true,
   "recommendation": "Do not share OTP, PIN, passwords or banking information. Verify the caller through an independent trusted channel.",
   "disclaimer": "This is an automated risk estimate based on limited signals. It is not proof of fraud or of AI-generated audio."
 }
@@ -173,6 +177,15 @@ curl -X POST localhost:8000/api/analyze \
   * number = UNKNOWN 0.0 · LOW 0.3 · MEDIUM 0.6 · HIGH 1.0
   * context = financial request (+0.6) + sensitive claimed identity such as bank / police / son / boss (+0.4), max 1.0
 * **Final level**: 0.00–0.34 LOW · 0.35–0.64 UNCERTAIN · 0.65–1.00 HIGH.
+* ### Security actions
+
+The security layer maps the final risk level to an appropriate action:
+
+- LOW → ALLOW
+- UNCERTAIN → WARNING
+- HIGH → VERIFY
+
+A HIGH risk assessment sets `verification_required` to `true`, indicating that additional verification should be performed before trusting the caller. The risk assessment is not proof of fraud.
 * These are simple prototype heuristics, not a validated fraud model.
 
 ## How ML detection is integrated
