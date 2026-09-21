@@ -1,5 +1,20 @@
+<<<<<<< HEAD
 streamlit>=1.36
 numpy
 matplotlib
 pandas
 soundfile
+=======
+fastapi>=0.110
+uvicorn>=0.29
+sqlalchemy>=2.0
+pydantic>=2.5
+python-multipart>=0.0.9
+python-dotenv>=1.0
+# testing
+pytest>=8.0
+httpx>=0.27
+#audio preprocessing
+librosa>=1.0.0
+numpy>=2.0.0
+>>>>>>> 64780b2e7e5a10dec198cacca08b1cc1ad3ab8ca
