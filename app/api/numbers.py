@@ -2,7 +2,22 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.schemas.numbers import NumberLookupResponse, ReportRequest, ReportResponse
+from pydantic import BaseModel
+from typing import Optional
+
+class ReportRequest(BaseModel):
+    phone_number: str
+    category: Optional[str] = "spam"
+    description: Optional[str] = ""
+
+class ReportResponse(BaseModel):
+    success: bool
+    message: str
+
+class NumberLookupResponse(BaseModel):
+    phone_number: str
+    risk_level: str
+    report_count: int
 from app.services import number_service
 
 router = APIRouter(prefix="/api/numbers", tags=["Numbers"])
