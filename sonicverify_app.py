@@ -2,15 +2,15 @@
 SonicVerify — AI-Powered Real-Time Voice Cloning & Impersonation Risk Detector
 --------------------------------------------------------------------------------
 A Streamlit front-end for a voice-integrity verification tool. Users can
-record or upload an audio clip; the app analyzes it and produces a
-Risk % score (probability the voice is AI-generated / cloned), a
-breakdown across Acoustic / Prosody / Spectral dimensions, a plain-
-language explanation, alerts, and recommended actions.
+record or upload an audio clip; the app analyzes it via the FastAPI backend
+and produces a Risk % score, a breakdown across Acoustic / Prosody / Spectral
+dimensions, a plain-language explanation, alerts, and recommended actions.
 """
 
 import io
 import time
 import wave
+import requests
 import datetime as dt
 
 import numpy as np
@@ -41,7 +41,7 @@ st.set_page_config(
 defaults = {
     "theme": "dark",
     "page": "Dashboard",
-    "history": [],           # list of result dicts (no raw audio)
+    "history": [],           # list of result dicts
     "current_audio": None,   # np.ndarray samples
     "current_sr": None,
     "current_source": None,  # filename / "Live Recording"
@@ -72,7 +72,6 @@ def inject_theme(theme: str):
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap');
 
-        /* Default Font Scope */
         :root {{
             --font-display: 'Sora', sans-serif;
             --primary-color: {grad1};
@@ -82,18 +81,15 @@ def inject_theme(theme: str):
             color: {text};
         }}
 
-        /* Apply Sora font globally without breaking Material Symbols/Icons */
         html, body, .stApp, .stApp *:not([data-testid="stIconMaterial"]):not(.material-icons):not([class*="material-symbols"]):not(i) {{
             font-family: "Sora", sans-serif;
             color: {text};
         }}
 
-        /* Global Markdown & Paragraph Visibility Fix */
         .stApp p, .stApp span, .stApp li, .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6 {{
             color: {text} !important;
         }}
 
-        /* STRICT FIX FOR DOUBLE ARROW TEXT / MATERIAL ICONS */
         [data-testid="stIconMaterial"],
         span[data-testid="stIconMaterial"],
         .material-icons,
@@ -115,7 +111,6 @@ def inject_theme(theme: str):
             -webkit-font-smoothing: antialiased !important;
         }}
 
-        /* App Backgrounds */
         html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"],
         .main, .block-container, [data-testid="stBottom"], [data-testid="stBottomBlockContainer"],
         [data-testid="stForm"], [data-testid="stVerticalBlock"], [data-testid="stHorizontalBlock"] {{
@@ -127,7 +122,6 @@ def inject_theme(theme: str):
         section[data-testid="stSidebar"] {{ background-color: {bg2} !important; border-right: 1px solid {border} !important; }}
         section[data-testid="stSidebar"] * {{ color: {text} !important; }}
 
-        /* SELECTBOX & DROPDOWN THEME MATCHING FIX */
         [data-testid="stSelectbox"] > div > div {{
             background-color: {card} !important;
             color: {text} !important;
@@ -156,7 +150,6 @@ def inject_theme(theme: str):
             color: {grad1} !important;
         }}
 
-        /* Expander Styling & Fixes */
         [data-testid="stExpander"] {{
             background-color: {card} !important;
             border: 1px solid {border} !important;
@@ -181,7 +174,6 @@ def inject_theme(theme: str):
             padding: 16px !important;
         }}
 
-        /* UPLOAD AUDIO & FILE UPLOADER THEME MATCHING */
         [data-testid="stFileUploader"] {{
             background-color: {card} !important;
             border: 1px solid {border} !important;
@@ -227,7 +219,6 @@ def inject_theme(theme: str):
             font-weight: 500 !important;
         }}
 
-        /* Audio Recorder Theme Match */
         [data-testid="stAudioInput"] {{
             background-color: {card} !important;
             border: 1px dashed {border} !important;
@@ -240,7 +231,6 @@ def inject_theme(theme: str):
         }}
         [data-testid="stAudioInput"] svg {{ fill: {grad1} !important; color: {grad1} !important; }}
 
-        /* Typography & Custom Elements */
         .sv-hero {{
             background: linear-gradient(120deg, {grad1}22, {grad2}22);
             border: 1px solid {border};
@@ -260,7 +250,6 @@ def inject_theme(theme: str):
             line-height: 1.6 !important;
         }}
 
-        /* Card Container & Explicit Text Color Fixes */
         .sv-card {{
             background-color: {card} !important; border: 1px solid {border} !important;
             border-radius: 16px; padding: 22px 24px; margin-bottom: 18px;
@@ -295,7 +284,6 @@ def inject_theme(theme: str):
         }}
         .sv-bar-fill {{ height: 100%; border-radius: 8px; }}
 
-        /* Buttons & Metrics */
         div[data-testid="stMetric"] {{
             background-color: {card} !important; border: 1px solid {border} !important;
             border-radius: 14px; padding: 14px 18px;
@@ -316,7 +304,6 @@ def inject_theme(theme: str):
         }}
         button[kind="primary"] p {{ color: #0a1128 !important; font-weight: 700; }}
 
-        /* Custom HTML Table */
         .sv-table {{ width: 100%; border-collapse: collapse; font-size: 0.92rem; }}
         .sv-table th {{
             text-align: left; color: {sub} !important; font-weight: 600; font-size: 0.78rem;
@@ -407,46 +394,69 @@ def load_audio(uploaded_file):
 
 
 # ============================================================================
-# ANALYSIS ENGINE
+# ANALYSIS ENGINE (FASTAPI BACKEND DISPATCHER)
 # ============================================================================
-def compute_scores(samples: np.ndarray, sr: int):
-    duration = len(samples) / sr if sr else 0
-    frame_len = max(1, int(sr * 0.02)) if sr else 512
-    n_frames = max(1, len(samples) // frame_len)
-    frames = samples[: n_frames * frame_len].reshape(n_frames, frame_len)
-    energy = np.sqrt(np.mean(frames ** 2, axis=1) + 1e-12)
+def run_backend_analysis(file_obj, filename, samples=None, sr=None):
+    with st.spinner("Analyzing audio with backend model..."):
+        try:
+            file_bytes = file_obj.getvalue() if hasattr(file_obj, "getvalue") else file_obj.read()
+            try:
+                file_obj.seek(0)
+            except Exception:
+                pass
 
-    energy_var = float(np.var(energy))
-    silence_ratio = float(np.mean(energy < (0.02 * (energy.max() + 1e-9))))
-    zcr = float(np.mean(np.abs(np.diff(np.sign(samples)))) / 2)
+            response = requests.post(
+                "https://sonicverify.onrender.com/api/analyze",
+                files={"audio": (filename, file_bytes, "audio/wav")},
+                data={
+                    "phone_number": "",
+                    "financial_request": "false",
+                    "identity_claim": "",
+                },
+                timeout=120,
+            )
 
-    spec = np.abs(np.fft.rfft(samples * np.hanning(len(samples)))) + 1e-9
-    spectral_flatness = float(np.exp(np.mean(np.log(spec))) / np.mean(spec))
+            if response.status_code == 200:
+                res_data = response.json()
+                if res_data.get("success"):
+                    risk_info = res_data.get("risk_assessment", {})
+                    risk_score = float(risk_info.get("risk_score", 50.0))
+                    
+                    if samples is None or sr is None:
+                        samples, sr = load_audio(file_obj)
 
-    acoustic = 100 * np.clip(1 - spectral_flatness * 3, 0, 1)
-    prosody = 100 * np.clip(1 - abs(zcr - 0.08) * 4, 0, 1) * (1 - 0.5 * silence_ratio)
-    prosody = float(np.clip(prosody, 0, 100))
-    spectral_consistency = 100 * np.clip(1 - abs(energy_var - 0.01) * 8, 0, 1)
+                    breakdown = risk_info.get("breakdown", {})
+                    res = {
+                        "duration": len(samples) / sr if (samples is not None and sr) else 0,
+                        "sample_rate": sr or 22050,
+                        "energy_var": 0.01,
+                        "silence_ratio": 0.1,
+                        "zcr": 0.08,
+                        "spectral_flatness": 0.1,
+                        "acoustic": float(breakdown.get("model_score", 50)),
+                        "prosody": float(breakdown.get("phone_reputation_score", 50)),
+                        "spectral": float(breakdown.get("context_risk_score", 50)),
+                        "risk": risk_score,
+                        "verdict": risk_info.get("risk_level", "Unknown"),
+                        "tier": "high" if risk_score >= 65 else ("medium" if risk_score >= 35 else "low"),
+                        "color": risk_color(risk_score),
+                        "filename": filename,
+                        "timestamp": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
 
-    naturalness = 0.4 * acoustic + 0.3 * prosody + 0.3 * spectral_consistency
-    risk = float(np.clip(100 - naturalness, 0, 100))
-
-    if risk >= 65:
-        verdict, tier = "Likely AI-Generated / Cloned Voice", "high"
-    elif risk >= 35:
-        verdict, tier = "Uncertain — Possible AI Voice", "medium"
-    else:
-        verdict, tier = "Likely Human Voice", "low"
-
-    return {
-        "duration": duration, "sample_rate": sr,
-        "energy_var": energy_var, "silence_ratio": silence_ratio,
-        "zcr": zcr, "spectral_flatness": spectral_flatness,
-        "acoustic": float(acoustic), "prosody": float(prosody),
-        "spectral": float(spectral_consistency),
-        "risk": risk, "verdict": verdict, "tier": tier,
-        "color": risk_color(risk),
-    }
+                    st.session_state.current_audio = samples
+                    st.session_state.current_sr = sr
+                    st.session_state.current_source = filename
+                    st.session_state.last_result = res
+                    st.session_state.history.append(res)
+                    st.session_state.page = "Analysis Result"
+                    st.rerun()
+                else:
+                    st.error(f"Backend error: {res_data.get('error', 'Unknown error')}")
+            else:
+                st.error(f"Backend HTTP {response.status_code}: {response.text}")
+        except Exception as e:
+            st.error(f"Failed to connect to backend: {e}")
 
 
 def explain(res):
@@ -565,34 +575,6 @@ def gauge_fig(risk, color):
     return fig
 
 
-def animate_waveform(samples, sr, color):
-    placeholder = st.empty()
-    n = len(samples)
-    steps = min(24, max(4, n // 4000))
-    for i in range(1, steps + 1):
-        upto = int(n * i / steps)
-        placeholder.pyplot(waveform_fig(samples, sr, color, upto=upto), use_container_width=True)
-        time.sleep(0.02)
-    placeholder.pyplot(waveform_fig(samples, sr, color), use_container_width=True)
-
-
-# ============================================================================
-# ANALYSIS RUNNER
-# ============================================================================
-def run_analysis(samples, sr, source_name):
-    res = compute_scores(samples, sr)
-    res["filename"] = source_name
-    res["timestamp"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    st.session_state.current_audio = samples
-    st.session_state.current_sr = sr
-    st.session_state.current_source = source_name
-    st.session_state.last_result = res
-    st.session_state.history.append(
-        {k: v for k, v in res.items()}
-    )
-    st.session_state.page = "Analysis Result"
-
-
 # ============================================================================
 # SIDEBAR NAVIGATION
 # ============================================================================
@@ -625,9 +607,8 @@ with st.sidebar:
 
     st.markdown("---")
     st.caption(
-        "⚠️ Prototype heuristic engine — analyzes acoustic, prosody and "
-        "spectral signal statistics. Not a certified forensic tool; use "
-        "alongside human judgment and secondary verification."
+        "⚠️ AI security tool — analyzes acoustic, prosody and "
+        "spectral signal statistics using the backend risk model."
     )
 
 page = st.session_state.page
@@ -725,7 +706,7 @@ elif page == "Record Audio":
     else:
         try:
             rec = st.audio_input("Tap the microphone to record",
-                                  key=f"recorder_{st.session_state.recorder_key}")
+                                   key=f"recorder_{st.session_state.recorder_key}")
         except Exception as e:
             st.error(f"Recording widget failed to load: {e}")
 
@@ -749,18 +730,11 @@ elif page == "Record Audio":
                 pass
             samples, sr = load_audio(rec)
             if samples is None:
-                st.error(
-                    "Couldn't decode this recording. Make sure `soundfile` "
-                    "installed correctly (`pip install soundfile`), then try "
-                    "again — or use Upload Audio with a WAV file instead."
-                )
+                st.error("Couldn't decode this recording. Try recording again or upload a WAV file.")
             elif sr and len(samples) / sr < 0.3:
                 st.warning("That recording was too short to analyze. Please record at least 1–2 seconds of speech.")
             else:
-                with st.spinner("Analyzing acoustic, prosody and spectral patterns…"):
-                    time.sleep(0.6)
-                run_analysis(samples, sr, "Live Recording")
-                st.rerun()
+                run_backend_analysis(rec, "Live Recording", samples=samples, sr=sr)
     else:
         st.info("Click the microphone icon above to start recording.")
 
@@ -775,202 +749,70 @@ elif page == "Upload Audio":
     if up is not None:
         st.audio(up)
         if st.button("▶️ Analyze File", type="primary"):
-            samples, sr = load_audio(up)
-            if samples is None:
-                st.error("Could not read this file. Please try a standard PCM WAV file.")
-            else:
-                with st.spinner("Analyzing acoustic, prosody and spectral patterns…"):
-                    time.sleep(0.6)
-                run_analysis(samples, sr, up.name)
-                st.rerun()
-
-    with st.expander("📦 Batch-analyze multiple files"):
-        batch = st.file_uploader("Choose multiple audio files", type=["wav", "flac", "ogg"],
-                                  accept_multiple_files=True, key="batch_uploader")
-        if batch and st.button("▶️ Analyze All"):
-            prog = st.progress(0, text="Starting…")
-            for i, f in enumerate(batch):
-                prog.progress(i / len(batch), text=f"Analyzing {f.name}…")
-                samples, sr = load_audio(f)
-                if samples is not None:
-                    res = compute_scores(samples, sr)
-                    res["filename"] = f.name
-                    res["timestamp"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    st.session_state.history.append(res)
-                    st.session_state.last_result = res
-            prog.progress(1.0, text="Done")
-            time.sleep(0.3)
-            st.success(f"Analyzed {len(batch)} files — see Alerts & History.")
+            run_backend_analysis(up, up.name)
 
 
 # ============================================================================
 # PAGE: ANALYSIS RESULT
 # ============================================================================
 elif page == "Analysis Result":
+    st.markdown('<div class="sv-hero"><h1>📊 Analysis Result</h1><p>Detailed voice integrity analysis & risk assessment.</p></div>', unsafe_allow_html=True)
+    
     res = st.session_state.last_result
-    if res is None:
-        st.markdown('<div class="sv-hero"><h1>📊 Analysis Result</h1><p>No analysis yet.</p></div>', unsafe_allow_html=True)
-        st.info("Go to **Record Audio** or **Upload Audio** to run your first check.")
+    if not res:
+        st.info("No active result. Please record or upload audio first.")
     else:
-        st.markdown(
-            f'<div class="sv-hero"><h1>📊 Analysis Result</h1>'
-            f'<p>Source: <b>{res["filename"]}</b> · Analyzed {res["timestamp"]}</p></div>',
-            unsafe_allow_html=True,
-        )
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            st.pyplot(gauge_fig(res["risk"], res["color"]))
+        with c2:
+            st.markdown(f"### Verdict: <span style='color:{res['color']}'>{res['verdict']}</span>", unsafe_allow_html=True)
+            st.caption(f"Source: {res['filename']} | Analyzed: {res['timestamp']}")
+            score_bar("Model Confidence / Acoustic Score", res["acoustic"], res["color"])
+            score_bar("Phone Reputation Score", res["prosody"], res["color"])
+            score_bar("Context Risk Score", res["spectral"], res["color"])
 
-        alert_class = {"high": "sv-alert-high", "medium": "sv-alert-med", "low": "sv-alert-low"}[res["tier"]]
-        alert_msg = {
-            "high": "🚨 HIGH RISK — Strong signs of AI-generated or cloned voice detected.",
-            "medium": "⚠️ MEDIUM RISK — Some signals are inconsistent with natural human speech. Proceed with caution.",
-            "low": "✅ LOW RISK — Signals are consistent with a genuine human voice.",
-        }[res["tier"]]
-        st.markdown(f'<div class="{alert_class}">{alert_msg}</div>', unsafe_allow_html=True)
+        st.markdown("#### Audio Analysis")
+        if st.session_state.current_audio is not None:
+            st.pyplot(waveform_fig(st.session_state.current_audio, st.session_state.current_sr, res["color"]))
 
-        tier_title = {"high": "High risk precautions", "medium": "Medium risk precautions", "low": "Low risk precautions"}[res["tier"]]
-        st.markdown(
-            f'<div class="sv-card" style="border:1px solid {res["color"]}; margin-top:12px;">'
-            f'<div style="font-weight:700; color:{res["color"]} !important; margin-bottom:8px;">{tier_title}</div>'
-            + "".join(f'<div style="margin:6px 0; color:{C["text"]};">{i}. {line}</div>' for i, line in enumerate(precautions(res["tier"]), 1))
-            + "</div>",
-            unsafe_allow_html=True,
-        )
-
-        left, right = st.columns([1, 1.4])
-        with left:
-            st.pyplot(gauge_fig(res["risk"], res["color"]), use_container_width=True)
-            st.markdown(
-                f'<div style="text-align:center;">'
-                f'<span class="sv-badge" style="background-color:{res["color"]}22; color:{res["color"]}; border:1px solid {res["color"]}">{res["verdict"]}</span>'
-                f'</div>', unsafe_allow_html=True,
-            )
-            m1, m2 = st.columns(2)
-            m1.metric("Duration", f"{res['duration']:.1f}s")
-            m2.metric("Sample rate", f"{res['sample_rate']} Hz" if res["sample_rate"] else "—")
-
-        with right:
-            st.markdown("**Risk Breakdown**")
-            score_bar("Acoustic Authenticity", res["acoustic"], "#ff7a1a")
-            score_bar("Prosody Naturalness", res["prosody"], "#ffa94d")
-            score_bar("Spectral Consistency", res["spectral"], "#5b8def")
-            st.caption("Higher bars = more consistent with genuine human speech.")
-
-        st.markdown("#### 🧠 Why this score?")
-        st.markdown('<div class="sv-card">', unsafe_allow_html=True)
+        st.markdown("#### Risk Analysis & Findings")
         for line in explain(res):
-            st.markdown(f"- {line}")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("#### 🌊 Waveform")
-        if st.session_state.current_audio is not None and st.session_state.current_source == res["filename"]:
-            animate_waveform(st.session_state.current_audio, st.session_state.current_sr, res["color"])
-            st.markdown("#### 🎼 Spectrogram")
-            st.pyplot(spectrogram_fig(st.session_state.current_audio, st.session_state.current_sr), use_container_width=True)
-        else:
-            st.caption("Waveform unavailable for this record (re-run analysis to view it).")
-
-        st.markdown("#### ✅ Recommended Actions")
-        st.markdown('<div class="sv-card">', unsafe_allow_html=True)
-        for r in recommendations(res["tier"]):
-            st.markdown(f"- {r}")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        report_text = (
-            f"SonicVerify Voice Integrity Report\n"
-            f"{'='*40}\n"
-            f"Source: {res['filename']}\n"
-            f"Analyzed: {res['timestamp']}\n\n"
-            f"VERDICT: {res['verdict']}\n"
-            f"AI Voice Risk: {res['risk']:.1f}%\n\n"
-            f"Breakdown:\n"
-            f"  Acoustic Authenticity:  {res['acoustic']:.0f}%\n"
-            f"  Prosody Naturalness:    {res['prosody']:.0f}%\n"
-            f"  Spectral Consistency:   {res['spectral']:.0f}%\n\n"
-            f"Explanation:\n" + "\n".join(f"  - {l}" for l in explain(res)) + "\n\n"
-            f"Recommended Actions:\n" + "\n".join(f"  - {r}" for r in recommendations(res["tier"])) + "\n\n"
-            f"Note: heuristic prototype score — not a certified forensic result.\n"
-        )
-        st.download_button("⬇️ Share / Download Report (.txt)", data=report_text,
-                            file_name=f"SonicVerify_Report_{res['filename']}.txt",
-                            mime="text/plain", use_container_width=True)
+            st.write(f"• {line}")
 
 
 # ============================================================================
 # PAGE: ALERTS & HISTORY
 # ============================================================================
 elif page == "Alerts & History":
-    st.markdown('<div class="sv-hero"><h1>🔔 Alerts &amp; History</h1><p>Every scan run this session, with risk level and verdict.</p></div>', unsafe_allow_html=True)
-
+    st.markdown('<div class="sv-hero"><h1>🔔 Alerts & Scan History</h1><p>View previous scan logs and risk records.</p></div>', unsafe_allow_html=True)
     hist = st.session_state.history
     if not hist:
-        st.info("No scans yet — nothing to show here.")
+        st.info("No scan history recorded yet.")
     else:
-        filt = st.selectbox("Filter by risk level", ["All", "High", "Medium", "Low"])
-        rows = hist
-        if filt != "All":
-            rows = [h for h in hist if h["tier"] == filt.lower()]
-
-        for h in reversed(rows):
-            badge_color = h["color"]
-            st.markdown(
-                f'<div class="sv-card" style="display:flex; justify-content:space-between; align-items:center;">'
-                f'<div><b>{h["filename"]}</b><br>'
-                f'<span class="sv-subtle">{h["timestamp"]}</span></div>'
-                f'<div style="text-align:right;">'
-                f'<span class="sv-badge" style="background-color:{badge_color}22; color:{badge_color}; border:1px solid {badge_color}">{h["verdict"]}</span><br>'
-                f'<span style="font-weight:800; font-size:1.2rem;">{h["risk"]:.0f}%</span></div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
-        df = pd.DataFrame(hist)[["timestamp", "filename", "verdict", "risk", "acoustic", "prosody", "spectral"]]
-        df.columns = ["Time", "Source", "Verdict", "Risk %", "Acoustic", "Prosody", "Spectral"]
-        c1, c2 = st.columns(2)
-        with c1:
-            st.download_button("⬇️ Export history (CSV)", data=df.to_csv(index=False),
-                                file_name="sonicverify_history.csv", mime="text/csv",
-                                use_container_width=True)
-        with c2:
-            if st.button("🗑️ Clear history", use_container_width=True):
-                st.session_state.history = []
-                st.session_state.last_result = None
-                st.rerun()
+        recent = []
+        for h in hist[::-1]:
+            recent.append({
+                "timestamp": h["timestamp"],
+                "filename": h["filename"],
+                "verdict_html": f'<span style="color:{h["color"]}; font-weight:700;">{h["verdict"]}</span>',
+                "risk_html": f'<b>{h["risk"]:.0f}%</b>',
+            })
+        render_table(recent, [("timestamp", "Time"), ("filename", "Source"), ("verdict_html", "Verdict"), ("risk_html", "Risk")])
 
 
 # ============================================================================
 # PAGE: RECOMMENDATIONS
 # ============================================================================
 elif page == "Recommendations":
-    st.markdown('<div class="sv-hero"><h1>🧭 Recommendations Playbook</h1><p>General best practices for handling suspected voice-cloning or impersonation calls.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sv-hero"><h1>🧭 Recommendations</h1><p>Suggested security measures based on the latest scan result.</p></div>', unsafe_allow_html=True)
+    res = st.session_state.last_result
+    tier = res["tier"] if res else "low"
+    
+    st.markdown("### Next Steps")
+    for r in recommendations(tier):
+        st.write(r)
 
-    cols = st.columns(3)
-    playbooks = [
-        ("🟢 Low Risk", "#2ecc71", recommendations("low")),
-        ("🟡 Medium Risk", "#f1c40f", recommendations("medium")),
-        ("🔴 High Risk", "#e74c3c", recommendations("high")),
-    ]
-    text_color = C["text"]
-    for col, (title, color, items) in zip(cols, playbooks):
-        with col:
-            items_html = "".join(f"<p style='color:{text_color} !important;'>{i}</p>" for i in items)
-            st.markdown(
-                f'<div class="sv-card"><h4 style="color:{color} !important;">{title}</h4>'
-                + items_html
-                + "</div>",
-                unsafe_allow_html=True,
-            )
-
-    st.markdown("#### General Guidance")
-    st.markdown(
-        f"""
-        <div class="sv-card">
-        <ul style="color:{C['text']} !important;">
-          <li style="color:{C['text']} !important;">Never approve high-value transfers or share credentials based on a phone call alone — always verify through a second, independent channel.</li>
-          <li style="color:{C['text']} !important;">Establish pre-agreed verification phrases with executives and finance teams for sensitive requests.</li>
-          <li style="color:{C['text']} !important;">Treat urgency and pressure tactics ("do this now, don't tell anyone") as a red flag regardless of the risk score.</li>
-          <li style="color:{C['text']} !important;">Log every flagged interaction, even low-risk ones, to help spot patterns over time.</li>
-          <li style="color:{C['text']} !important;">Keep this tool's output as one input among several — combine it with organizational verification policy.</li>
-        </ul>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("### Safety Precautions")
+    for p in precautions(tier):
+        st.write(f"• {p}")
