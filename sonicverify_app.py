@@ -405,13 +405,16 @@ def run_backend_analysis(file_obj, filename, samples=None, sr=None):
             except Exception:
                 pass
 
+            # Read backend URL dynamically from Streamlit Secrets or default to Render
+            backend_url = st.secrets.get("BACKEND_URL", "https://sonicverify.onrender.com/api/analyze")
+
             response = requests.post(
-                "https://sonicverify.onrender.com/api/analyze",
+                backend_url,
                 files={"audio": (filename, file_bytes, "audio/wav")},
                 data={
-                    "phone_number": "",
+                    "phone_number": "+10000000000",
                     "financial_request": "false",
-                    "identity_claim": "",
+                    "identity_claim": "unspecified",
                 },
                 timeout=120,
             )
@@ -768,51 +771,69 @@ elif page == "Analysis Result":
         with c2:
             st.markdown(f"### Verdict: <span style='color:{res['color']}'>{res['verdict']}</span>", unsafe_allow_html=True)
             st.caption(f"Source: {res['filename']} | Analyzed: {res['timestamp']}")
-            score_bar("Model Confidence / Acoustic Score", res["acoustic"], res["color"])
-            score_bar("Phone Reputation Score", res["prosody"], res["color"])
-            score_bar("Context Risk Score", res["spectral"], res["color"])
+            score_bar("Acoustic Model Confidence", res["acoustic"], res["color"])
+            score_bar("Prosody & Cadence Risk", res["prosody"], res["color"])
+            score_bar("Spectral Signal Anomaly", res["spectral"], res["color"])
 
-        st.markdown("#### Audio Analysis")
-        if st.session_state.current_audio is not None:
-            st.pyplot(waveform_fig(st.session_state.current_audio, st.session_state.current_sr, res["color"]))
+        st.markdown("---")
+        st.markdown("#### Signal & Feature Analysis")
+        f1, f2, f3, f4 = st.columns(4)
+        f1.metric("Duration", f"{res['duration']:.2f}s")
+        f2.metric("Sample Rate", f"{res['sample_rate']} Hz")
+        f3.metric("Silence Ratio", f"{res['silence_ratio']*100:.1f}%")
+        f4.metric("Zero-Crossing Rate", f"{res['zcr']:.3f}")
 
-        st.markdown("#### Risk Analysis & Findings")
-        for line in explain(res):
-            st.write(f"• {line}")
+        st.markdown("#### Audio Visualizations")
+        tab1, tab2 = st.tabs(["Waveform", "Spectrogram"])
+        with tab1:
+            if st.session_state.current_audio is not None:
+                st.pyplot(waveform_fig(st.session_state.current_audio, st.session_state.current_sr, res["color"]))
+        with tab2:
+            if st.session_state.current_audio is not None:
+                st.pyplot(spectrogram_fig(st.session_state.current_audio, st.session_state.current_sr))
+
+        st.markdown("#### Explainability Insights")
+        exp_lines = explain(res)
+        for line in exp_lines:
+            st.markdown(f"- {line}")
 
 
 # ============================================================================
 # PAGE: ALERTS & HISTORY
 # ============================================================================
 elif page == "Alerts & History":
-    st.markdown('<div class="sv-hero"><h1>🔔 Alerts & Scan History</h1><p>View previous scan logs and risk records.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sv-hero"><h1>🔔 Alerts & History</h1><p>View historical risk scans and logged alerts.</p></div>', unsafe_allow_html=True)
     hist = st.session_state.history
     if not hist:
-        st.info("No scan history recorded yet.")
+        st.info("No historical scans recorded.")
     else:
-        recent = []
+        table_data = []
         for h in hist[::-1]:
-            recent.append({
+            table_data.append({
                 "timestamp": h["timestamp"],
                 "filename": h["filename"],
                 "verdict_html": f'<span style="color:{h["color"]}; font-weight:700;">{h["verdict"]}</span>',
                 "risk_html": f'<b>{h["risk"]:.0f}%</b>',
             })
-        render_table(recent, [("timestamp", "Time"), ("filename", "Source"), ("verdict_html", "Verdict"), ("risk_html", "Risk")])
+        render_table(table_data, [("timestamp", "Timestamp"), ("filename", "File"),
+                                  ("verdict_html", "Verdict"), ("risk_html", "Risk Score")])
 
 
 # ============================================================================
 # PAGE: RECOMMENDATIONS
 # ============================================================================
 elif page == "Recommendations":
-    st.markdown('<div class="sv-hero"><h1>🧭 Recommendations</h1><p>Suggested security measures based on the latest scan result.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sv-hero"><h1>🧭 Recommendations</h1><p>Actionable security guidance based on risk levels.</p></div>', unsafe_allow_html=True)
     res = st.session_state.last_result
     tier = res["tier"] if res else "low"
     
-    st.markdown("### Next Steps")
-    for r in recommendations(tier):
-        st.write(r)
+    st.markdown(f"### Current Recommended Actions (Risk Tier: **{tier.upper()}**)")
+    recs = recommendations(tier)
+    for r in recs:
+        st.markdown(f"- {r}")
 
-    st.markdown("### Safety Precautions")
-    for p in precautions(tier):
-        st.write(f"• {p}")
+    st.markdown("---")
+    st.markdown("### Caller Security Precautions")
+    precs = precautions(tier)
+    for p in precs:
+        st.markdown(f"- {p}")
