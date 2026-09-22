@@ -1,6 +1,3 @@
-Here is a crisp, professionally updated `README.md` for your **SonicVerify** repository:
-
----
 
 # 🎙️ SonicVerify — Audio Deepfake & Voice Scam Detection System
 
